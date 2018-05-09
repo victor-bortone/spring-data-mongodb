@@ -68,7 +68,7 @@ public class MongoTransactionManager extends AbstractPlatformTransactionManager
 	 * before using the instance. Use this constructor to prepare a {@link MongoTransactionManager} via a
 	 * {@link org.springframework.beans.factory.BeanFactory}.
 	 * <p />
-	 * Optionally it is possible to set default {@link TransactionOptions transaction options} defining eg.
+	 * Optionally it is possible to set default {@link TransactionOptions transaction options} defining
 	 * {@link com.mongodb.ReadConcern} and {@link com.mongodb.WriteConcern}.
 	 * 
 	 * @see #setDbFactory(MongoDbFactory)
