@@ -4,12 +4,15 @@ jdk:
   - oraclejdk8
 
 before_script:
+  - mkdir -p downloads
+  - mkdir -p data
+  - if [[ ! -d downloads/mongodb-linux-x86_64-ubuntu1604-${MONGO_VERSION} ]] ; then cd downloads && wget https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu1604-${MONGO_VERSION}.tgz && tar xzf mongodb-linux-x86_64-ubuntu1604-${MONGO_VERSION}.tgz; fi
+  - set PATH="downloads/mongodb-linux-x86_64-ubuntu1604-${MONGO_VERSION}/bin:$PATH"
   - mongod --version
-  - |-
-    echo "replication:
-      replSetName: rs0" | sudo tee -a /etc/mongod.conf
-  - sudo service mongod restart
+  - mongod --dbpath data --replSet rs0 
   - sleep 20
+  - |-
+    mongo admin --eval  "db.adminCommand({setFeatureCompatibilityVersion: '3.4'});"
   - |-
     mongo --eval "rs.initiate({_id: 'rs0', members:[{_id: 0, host: '127.0.0.1:27017'}]});"
   - sleep 15
@@ -21,16 +24,11 @@ env:
   matrix:
     - PROFILE=ci
     - PROFILE=mongo36-next
+ global:
+    - MONGO_VERSION=3.7.9
 
-# Current MongoDB version is 2.4.2 as of 2016-04, see https://github.com/travis-ci/travis-ci/issues/3694
-# apt-get starts a MongoDB instance so it's not started using before_script
 addons:
   apt:
-    sources:
-      - mongodb-3.4-precise
-    packages:
-    - mongodb-org-server
-    - mongodb-org-shell
     - oracle-java8-installer
 
 sudo: false
@@ -40,7 +38,5 @@ cache:
     - $HOME/.m2
 
 install:
-  - |-
-    mongo admin --eval  "db.adminCommand({setFeatureCompatibilityVersion: '3.4'});"
 
 script: "mvn clean dependency:list test -P${PROFILE} -Dsort"
