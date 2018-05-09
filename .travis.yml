@@ -24,7 +24,7 @@ env:
   matrix:
     - PROFILE=ci
     - PROFILE=mongo36-next
- global:
+  global:
     - MONGO_VERSION=3.7.9
 
 addons:
