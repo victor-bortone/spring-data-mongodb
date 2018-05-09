@@ -9,6 +9,9 @@ Both `MongoOperations` and `ReactiveMongoOperations` provide gateway methods for
 
 NOTE: Methods like `(Reactive)MongoOperations#getCollection` returning native MongoDB Java Driver gateway objects, such as `MongoCollection`, that themselves offer dedicated methods for `ClientSession` are *NOT* be session-proxied. So make sure to provide the `ClientSession` where needed when interacting directly with a `MongoCollection` or `MongoDatabase` and not via one of the `#execute` callbacks on `MongoOperations`.
 
+[[mongo.sessions.sync]]
+== Synchronous `ClientSession` support.
+
 Let's take a look at a simple session example:
 
 .`ClientSession` with `MongoOperations`
@@ -43,6 +46,9 @@ session.close()                                              <4>
 ====
 
 WARNING: When dealing with ``DBRef``s, especially lazily loaded ones, it is essential to **not** close the `ClientSession` before all data is loaded. Otherwise, lazy fetch fails.
+
+[[mongo.sessions.reactive]]
+== Reactive `ClientSession` support
 
 The reactive counterpart uses the very same building blocks as the imperative one:
 
@@ -201,3 +207,53 @@ public class StateService {
 
 NOTE: `@Transactional(readOnly = true)` advises `MongoTransactionManager` also to start a transaction adding the
  `ClientSession` to outgoing requests.
+
+== Reactive transactions
+
+Same as with the reactive `ClientSession` support, the `ReactiveMongoTemplate` offers dedicated methods for operating
+within a transaction without having to worry about the commit/abort actions depending on the operations outcome.
+
+Using the plain MongoDB reactive driver API a simple `delete within a transactional flow may look like this.
+
+.Native driver support
+====
+[source,java]
+----
+Mono<DeleteResult> result = Mono
+      .from(client.startSession())                                                              <1>
+      .flatMap(session -> {
+         session.startTransaction();                                                            <2>
+         return Mono.from(collection.deleteMany(session, ...))                                  <3>
+               .onErrorResume(e -> Mono.from(session.abortTransaction()).then(Mono.error(e)))   <4>
+               .flatMap(val -> Mono.from(session.commitTransaction()).then(Mono.just(val)))     <5>
+               .doFinally(signal -> session.close());                                           <6>
+      });
+----
+<1> Ok, first we obvoiusly need to initiate the session.
+<2> Once we've the `ClientSession` at hand, start the transaction.
+<3> Operate within the transaction by passing on the `ClientSession` to the operation.
+<4> If the operations errors, we need to abort the transaction and preserve the error.
+<5> Or of course, commit the changes in case of success. Still preserving the operations result.
+<6> Last, we need to make sure to close the session.
+====`
+
+The culprit of the above operation is in keeping the main flows `DeleteResult` instead of the transaction outcome
+published via either `commitTransaction()` or `abortTransaction()`, which leads to a rather complicated setup.
+
+`MongoOperations.inTransaction()` allows you to utilize the callback from for the <<mongo.sessions.reactive,
+reactive session support>> to actually preserve the flows outcome but also perform commit and abort actions
+accordingly. This allows you to express the above flow simply as the following:
+
+.ReactiveMongoTemplate transactions
+====
+[source,java]
+----
+Mono<DeleteResult> result = template.inTransaction()                                        <1>
+      .execute(action -> action.remove(query(where("id").is("step-1")), Step.class));       <2>
+----
+<1> Initiate the transaction.
+<2> Operate within the `ClientSession`.
+====
+
+NOTE: In case you need access to the `ClientSession` within the flow, you can use `ReactiveMongoContext.getSession()`
+ to obtain in from the Reactor `Context`.
