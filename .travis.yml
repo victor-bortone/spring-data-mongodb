@@ -37,6 +37,4 @@ cache:
   directories:
     - $HOME/.m2
 
-install:
-
 script: "mvn clean dependency:list test -P${PROFILE} -Dsort"
